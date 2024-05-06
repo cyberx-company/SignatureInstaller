@@ -1,54 +1,5 @@
 #!/bin/bash
 
-load_signature_file() {
-	echo "searching signature file..."
-
-	local SIGNATURES_PATH_ICLOUD_V5="$HOME/Library/Mobile Documents/com~apple~mail/Data/V5/Signatures/"
-	local SIGNATURES_PATH_ICLOUD_V4="$HOME/Library/Mobile Documents/com~apple~mail/Data/V4/Signatures/"
-	local SIGNATURES_PATH_ICLOUD_V3="$HOME/Library/Mobile Documents/com~apple~mail/Data/V3/Signatures/"
-	local SIGNATURES_PATH_ICLOUD_V2="$HOME/Library/Mobile Documents/com~apple~mail/Data/V2/Signatures/"
-	local SIGNATURES_PATH_NON_ICLOUD_V5="$HOME/Library/Mail/V5/MailData/Signatures/"
-	local SIGNATURES_PATH_NON_ICLOUD_V4="$HOME/Library/Mail/V4/MailData/Signatures/"
-	local SIGNATURES_PATH_NON_ICLOUD_V3="$HOME/Library/Mail/V3/MailData/Signatures/"
-	local SIGNATURES_PATH_NON_ICLOUD_V2="$HOME/Library/Mail/V2/MailData/Signatures/"
-
-	if [ -d "$SIGNATURES_PATH_ICLOUD_V5" ]; then
-		echo "found iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_ICLOUD_V5"
-	elif [ -d "$SIGNATURES_PATH_ICLOUD_V4" ]; then
-		echo "found iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_ICLOUD_V4"
-	elif [ -d "$SIGNATURES_PATH_ICLOUD_V3" ]; then
-		echo "found iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_ICLOUD_V3"
-	elif [ -d "$SIGNATURES_PATH_ICLOUD_V2" ]; then
-		echo "found iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_ICLOUD_V2"
-	elif [ -d "$SIGNATURES_PATH_NON_ICLOUD_V5" ]; then
-		echo "found non-iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_NON_ICLOUD_V5"
-	elif [ -d "$SIGNATURES_PATH_NON_ICLOUD_V4" ]; then
-		echo "found non-iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_NON_ICLOUD_V4"
-	elif [ -d "$SIGNATURES_PATH_NON_ICLOUD_V3" ]; then
-		echo "found non-iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_NON_ICLOUD_V3"
-	elif [ -d "$SIGNATURES_PATH_NON_ICLOUD_V2" ]; then
-		echo "found non-iCloud signature directory"
-		local SIGNATURE_PATH="$SIGNATURES_PATH_NON_ICLOUD_V2"
-	else
-		echo "signature directory not found"
-		exit 1
-	fi
-
-	SIGNATURE_FILE=`ls -1t "$SIGNATURE_PATH"*.mailsignature | head -n 1`
-
-	if [[ $? -ne 0 ]] || [[ -z "$SIGNATURE_FILE" ]]; then
-		echo "listing error, create a signature"
-		exit 1
-	fi
-}
-
 download_signature() {
 	echo "downloading signature..."
 
@@ -74,32 +25,40 @@ download_signature() {
 setup_signature() {
 	echo "setting up signature..."
 
-	i=0;
-	SIGNATURE=""
-	while read line; do
-		if [[ -z "$line" ]]; then
-			break
-		fi
+	SIGNATURE_HTML_ESCAPED=`echo "$SIGNATURE_HTML" | sed -e 's/"/\\\"/g'`
 
-		if [[ "$i" -eq 0 ]]; then
-			SIGNATURE="$line"
-		else
-			SIGNATURE="$SIGNATURE\n$line"
-		fi
+	osascript <<END
+tell application id "com.microsoft.Outlook"
+	make new signature with properties {name:"signature", content:"$SIGNATURE_HTML_ESCAPED"}
+end tell
+END
 
-		i=$((i + 1))
-	done < "$SIGNATURE_FILE"
+	if [ -f "$HOME/Library/Preferences/com.microsoft.Outlook.plist" ]; then
+		defaults write "$HOME/Library/Preferences/com.microsoft.Outlook.plist" "AutomaticallyDownloadExternalContent" -int 2
+		defaults write "$HOME/Library/Preferences/com.microsoft.Outlook.plist" "Send Pictures With Document" -int 0
+	fi
 
-	SIGNATURE="$SIGNATURE\n\n$SIGNATURE_HTML"
-
-	chflags nouchg "$SIGNATURE_FILE"
-	echo -e "$SIGNATURE" > "$SIGNATURE_FILE"
-	chflags uchg "$SIGNATURE_FILE"
+	if [ -f "$HOME/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist" ]; then
+		defaults write "$HOME/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist" "AutomaticallyDownloadExternalContent" -int 2
+		defaults write "$HOME/Library/Containers/com.microsoft.Outlook/Data/Library/Preferences/com.microsoft.Outlook.plist" "Send Pictures With Document" -int 0
+	fi
 
 	echo "done."
 }
 
+add_addin() {
+	echo "adding add-in..."
 
-load_signature_file
+	osascript <<END
+tell application id "com.microsoft.Outlook"
+	set addInPath to POSIX file "/path/to/your/addin.xml"
+	make new add-in with properties { file: addInPath }
+end tell
+END
+
+	echo "done."
+}
+
 download_signature
 setup_signature
+add_addin
